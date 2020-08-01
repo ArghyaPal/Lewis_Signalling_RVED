@@ -35,7 +35,7 @@ class DrawModel(nn.Module):
         self.dec_linear = nn.Linear(dec_size, 5)
         self.enc_w_linear = nn.Linear(dec_size, N*N)
         self.generator = nn.Sequential(
-                                nn.Linear(A*B, A*B),
+                                nn.Linear(dec_size, A*B),
                                 nn.ReLU())
         self.generator = self.generator.cuda()
 
@@ -109,31 +109,27 @@ class DrawModel(nn.Module):
             ###################################################
 
 
-            h_dec, dec_state = self.decoder(s_t, (h_dec_prev, dec_state)) 
-            x_guess = self.generator(self.write(h_dec))
+            h_dec, dec_state = self.decoder(s_t, (h_dec_prev, dec_state))
+            x_guess = self.generator(h_dec)
             ###################################################
             # We are giving a lightweight KNN
             # x_pseudo =  self.KNN(x_guess)  
             # We used the KNN based retrieval in our final implementation, 
             #Howvever, in this implementation we are using ground truth itself
             x_pseudo = x
-
             if t % 3 == 0:
-              Lx += criterion(x_guess, x_pseudo)
-              #La += criterion(self.write(h_dec), ram)
-              #print(Lx)
+              Lx += criterion(x_guess, x_pseudo) * self.A * self.B
               Lb += criterion(x_guess, ram)
-              #print(Lb)
             
-            self.cs_rec_[t] =  x_guess # c_prev_decoder is working fine ...!
+            self.cs_rec_[t] =  x_guess # Showing the reconstructions ... !
             h_dec_prev = h_dec
 
-        La = criterion_1(x_guess, ram)
+        #La = criterion_1(x_guess, ram) * self.A * self.B
         imgs_gen = []
         for img_gen in self.cs_rec_:
             imgs_gen.append(self.sigmoid(img_gen).cpu().data.numpy())
         
-        return Lx, La, Lb, imgs_gen, self.cs_rec_ #x_guess
+        return Lx, La, Lb, imgs_gen, self.cs_rec_ 
 
 # This is not available
     def KNN(self, x_guess):   # We will give the full version in our official release after acceptance
@@ -146,12 +142,12 @@ class DrawModel(nn.Module):
     def loss(self, x):
         Lx, La, Lb, imgs_rec, self.cs_rec_ = self.forward(x)
 
-        criterion = nn.MSELoss()
+        criterion = nn.L1Loss()
         x_encoder = self.sigmoid(self.cs[-1])
         x_decoder = self.sigmoid(self.cs_rec_[-1]) #self.cs_decoder[-1])
 
         Le = criterion(x_encoder, x) * self.A * self.B
-        Lf = criterion(x_decoder, x) * self.A * self.B
+        Lf = criterion(x_decoder, x)
 
         Lz = 0
         kl_terms = [0] * T
@@ -228,8 +224,7 @@ class DrawModel(nn.Module):
             s_t = self.normalSample()
 
             h_dec, dec_state = self.decoder(s_t, (h_dec_prev, dec_state))
-            #v_t = self.write(h_dec)
-            x_guess = self.sigmoid(self.generator(self.write(h_dec)))
+            x_guess = self.sigmoid(self.generator(h_dec))
             self.cs_d_[t] = x_guess
             h_dec_prev = h_dec
 
@@ -237,3 +232,4 @@ class DrawModel(nn.Module):
         for img in self.cs_d_:
             imgs.append(self.sigmoid(img).cpu().data.numpy())
         return imgs
+
